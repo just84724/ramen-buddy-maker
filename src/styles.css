@@ -105,3 +105,8 @@
     letter-spacing: 0.02em;
   }
 }
+
+@media print {
+  body { background: white !important; }
+  header, nav, footer, .print\:hidden { display: none !important; }
+}
