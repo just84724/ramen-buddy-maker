@@ -13,7 +13,7 @@ import { format, addMinutes } from "date-fns";
 import {
   FLAVORS, type Flavor, type CartItem, type FulfillmentType,
   itemGross, isFullCombo, computePricing, loadRules, type DiscountRules,
-  itemTagList, saveOrder, flavorOf,
+  itemTagList, saveOrder, flavorOf, takePendingCart,
 } from "@/lib/order";
 import { SiteHeader } from "@/components/SiteHeader";
 import { RulesEditor } from "@/components/RulesEditor";
