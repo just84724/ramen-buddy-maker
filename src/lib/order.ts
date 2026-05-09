@@ -223,7 +223,8 @@ const PENDING_CART_KEY = "ramen.pendingCart.v1";
 export function loadOrders(): Order[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    const raw: Order[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return raw.map(o => ({ ...o, status: (o.status as OrderStatus) || "created" }));
   } catch {
     return [];
   }
@@ -244,6 +245,15 @@ export function deleteOrder(id: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
 }
 
+export function updateOrderStatus(id: string, status: OrderStatus): Order | undefined {
+  const all = loadOrders();
+  const idx = all.findIndex(o => o.id === id);
+  if (idx < 0) return undefined;
+  all[idx] = { ...all[idx], status };
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  return all[idx];
+}
+
 export function loadRules(): DiscountRules {
   if (typeof window === "undefined") return DEFAULT_RULES;
   try {
@@ -255,4 +265,18 @@ export function loadRules(): DiscountRules {
 
 export function saveRules(rules: DiscountRules) {
   localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+}
+
+/** 將指定訂單的品項複製為新的暫存購物車（重複下單用） */
+export function setPendingCart(items: CartItem[]) {
+  const cloned = items.map(i => ({ ...i, uid: crypto.randomUUID() }));
+  localStorage.setItem(PENDING_CART_KEY, JSON.stringify(cloned));
+}
+
+export function takePendingCart(): CartItem[] | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PENDING_CART_KEY);
+  if (!raw) return null;
+  localStorage.removeItem(PENDING_CART_KEY);
+  try { return JSON.parse(raw); } catch { return null; }
 }
