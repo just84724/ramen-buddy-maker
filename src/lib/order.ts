@@ -124,6 +124,21 @@ export function itemTagList(item: CartItem) {
   return [item.big && "加大", item.egg && "糖心蛋", item.pork && "叉燒"].filter(Boolean) as string[];
 }
 
+export type OrderStatus = "created" | "preparing" | "completed";
+
+export const ORDER_STATUS_FLOW: OrderStatus[] = ["created", "preparing", "completed"];
+
+export const ORDER_STATUS_META: Record<OrderStatus, { label: string; emoji: string; tone: string }> = {
+  created: { label: "已建立", emoji: "📝", tone: "bg-secondary text-secondary-foreground" },
+  preparing: { label: "備餐中", emoji: "🍳", tone: "bg-amber-100 text-amber-900" },
+  completed: { label: "完成", emoji: "✅", tone: "bg-emerald-100 text-emerald-900" },
+};
+
+export function nextStatus(s: OrderStatus): OrderStatus | null {
+  const i = ORDER_STATUS_FLOW.indexOf(s);
+  return i >= 0 && i < ORDER_STATUS_FLOW.length - 1 ? ORDER_STATUS_FLOW[i + 1] : null;
+}
+
 export type Order = {
   id: string;
   createdAt: string;
@@ -133,15 +148,83 @@ export type Order = {
   note?: string;
   rulesSnapshot: DiscountRules;
   pricing: PricingBreakdown;
+  status: OrderStatus;
 };
+
+/** 計算可讀折扣解釋（用於收據逐條顯示） */
+export type DiscountExplain = {
+  key: string;
+  label: string;
+  formula: string;
+  amount: number; // 負數=折抵, 正數=加收, 0=資訊
+  kind: "discount" | "fee" | "info";
+};
+
+export function explainPricing(
+  items: CartItem[],
+  rules: DiscountRules,
+  fulfillment: FulfillmentType,
+  pricing: PricingBreakdown,
+): DiscountExplain[] {
+  const out: DiscountExplain[] = [];
+  if (pricing.fullComboBowls > 0) {
+    out.push({
+      key: "fullCombo",
+      label: "加好加滿折扣",
+      formula: `${pricing.fullComboBowls} 碗 × $${rules.fullComboPerBowl} = $${pricing.fullComboDiscount}`,
+      amount: -pricing.fullComboDiscount,
+      kind: "discount",
+    });
+  }
+  if (items.length >= rules.bulkMinBowls) {
+    out.push({
+      key: "bulk",
+      label: `多碗優惠（滿 ${rules.bulkMinBowls} 碗）`,
+      formula: `${items.length} 碗 × $${rules.bulkPerBowl} = $${pricing.bulkDiscount}`,
+      amount: -pricing.bulkDiscount,
+      kind: "discount",
+    });
+  } else if (items.length > 0) {
+    out.push({
+      key: "bulk-info",
+      label: "多碗優惠",
+      formula: `再點 ${rules.bulkMinBowls - items.length} 碗即享每碗折 $${rules.bulkPerBowl}`,
+      amount: 0,
+      kind: "info",
+    });
+  }
+  if (fulfillment === "delivery") {
+    const afterDiscount = pricing.subtotal - pricing.fullComboDiscount - pricing.bulkDiscount;
+    if (pricing.freeDeliveryApplied) {
+      out.push({
+        key: "delivery",
+        label: "外送費（滿額免運）",
+        formula: `折抵後 $${afterDiscount} ≥ 免運門檻 $${rules.freeDeliveryOver}`,
+        amount: -rules.deliveryFee,
+        kind: "discount",
+      });
+    } else {
+      out.push({
+        key: "delivery",
+        label: "外送費",
+        formula: `差 $${Math.max(0, rules.freeDeliveryOver - afterDiscount)} 即可免運`,
+        amount: pricing.deliveryFee,
+        kind: "fee",
+      });
+    }
+  }
+  return out;
+}
 
 const HISTORY_KEY = "ramen.orders.v1";
 const RULES_KEY = "ramen.rules.v1";
+const PENDING_CART_KEY = "ramen.pendingCart.v1";
 
 export function loadOrders(): Order[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    const raw: Order[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return raw.map(o => ({ ...o, status: (o.status as OrderStatus) || "created" }));
   } catch {
     return [];
   }
@@ -162,6 +245,15 @@ export function deleteOrder(id: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
 }
 
+export function updateOrderStatus(id: string, status: OrderStatus): Order | undefined {
+  const all = loadOrders();
+  const idx = all.findIndex(o => o.id === id);
+  if (idx < 0) return undefined;
+  all[idx] = { ...all[idx], status };
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  return all[idx];
+}
+
 export function loadRules(): DiscountRules {
   if (typeof window === "undefined") return DEFAULT_RULES;
   try {
@@ -173,4 +265,18 @@ export function loadRules(): DiscountRules {
 
 export function saveRules(rules: DiscountRules) {
   localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+}
+
+/** 將指定訂單的品項複製為新的暫存購物車（重複下單用） */
+export function setPendingCart(items: CartItem[]) {
+  const cloned = items.map(i => ({ ...i, uid: crypto.randomUUID() }));
+  localStorage.setItem(PENDING_CART_KEY, JSON.stringify(cloned));
+}
+
+export function takePendingCart(): CartItem[] | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PENDING_CART_KEY);
+  if (!raw) return null;
+  localStorage.removeItem(PENDING_CART_KEY);
+  try { return JSON.parse(raw); } catch { return null; }
 }

@@ -13,7 +13,7 @@ import { format, addMinutes } from "date-fns";
 import {
   FLAVORS, type Flavor, type CartItem, type FulfillmentType,
   itemGross, isFullCombo, computePricing, loadRules, type DiscountRules,
-  itemTagList, saveOrder, flavorOf,
+  itemTagList, saveOrder, flavorOf, takePendingCart,
 } from "@/lib/order";
 import { SiteHeader } from "@/components/SiteHeader";
 import { RulesEditor } from "@/components/RulesEditor";
@@ -105,6 +105,15 @@ function Index() {
 
   useEffect(() => { setRules(loadRules()); }, []);
 
+  // 從訂單歷史「重複下單」帶過來的暫存購物車
+  useEffect(() => {
+    const pending = takePendingCart();
+    if (pending && pending.length) {
+      setCart(pending);
+      toast.success(`已載入 ${pending.length} 碗，請確認後結帳`);
+    }
+  }, []);
+
   const addItem = (flavor: Flavor, opts: { big: boolean; egg: boolean; pork: boolean }) => {
     if (cart.length >= 10) return toast.error("一次最多 10 碗喔！");
     setCart(c => [...c, { uid: crypto.randomUUID(), flavorId: flavor.id, ...opts }]);
@@ -126,6 +135,7 @@ function Index() {
       note: note.trim() || undefined,
       rulesSnapshot: rules,
       pricing,
+      status: "created" as const,
     };
     saveOrder(order);
     setCart([]); setNote("");
