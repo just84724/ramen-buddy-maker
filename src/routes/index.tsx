@@ -135,6 +135,7 @@ function Index() {
       note: note.trim() || undefined,
       rulesSnapshot: rules,
       pricing,
+      status: "created" as const,
     };
     saveOrder(order);
     setCart([]); setNote("");
