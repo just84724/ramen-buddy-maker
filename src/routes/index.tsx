@@ -105,6 +105,15 @@ function Index() {
 
   useEffect(() => { setRules(loadRules()); }, []);
 
+  // 從訂單歷史「重複下單」帶過來的暫存購物車
+  useEffect(() => {
+    const pending = takePendingCart();
+    if (pending && pending.length) {
+      setCart(pending);
+      toast.success(`已載入 ${pending.length} 碗，請確認後結帳`);
+    }
+  }, []);
+
   const addItem = (flavor: Flavor, opts: { big: boolean; egg: boolean; pork: boolean }) => {
     if (cart.length >= 10) return toast.error("一次最多 10 碗喔！");
     setCart(c => [...c, { uid: crypto.randomUUID(), flavorId: flavor.id, ...opts }]);
