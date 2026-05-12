@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
 import { format } from "date-fns";
 import {
   type Order, flavorOf, itemGross, itemTagList, explainPricing,
@@ -96,16 +96,20 @@ export async function buildReceiptPdf(order: Order): Promise<jsPDF> {
   const node = buildReceiptHtml(order);
   document.body.appendChild(node);
   try {
-    const canvas = await html2canvas(node, {
-      scale: 2,
+    // 等字型載入完成，避免量測誤差
+    if (document.fonts?.ready) await document.fonts.ready;
+    const dataUrl = await toPng(node, {
+      pixelRatio: 2,
       backgroundColor: "#ffffff",
-      logging: false,
-      useCORS: true,
+      cacheBust: true,
     });
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error("image load failed")); });
     const imgW = 320;
-    const imgH = (canvas.height * imgW) / canvas.width;
+    const imgH = (img.height * imgW) / img.width;
     const doc = new jsPDF({ unit: "pt", format: [imgW, imgH] });
-    doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, imgW, imgH);
+    doc.addImage(dataUrl, "PNG", 0, 0, imgW, imgH);
     return doc;
   } finally {
     node.remove();
