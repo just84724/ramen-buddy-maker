@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
 import { format } from "date-fns";
 import {
   type Order, flavorOf, itemGross, itemTagList, explainPricing,
